@@ -1,0 +1,32 @@
+export interface Member {
+  id: string
+  name: string
+  color: string
+}
+
+export interface Expense {
+  id: string
+  dayIndex: number
+  description: string
+  amount: number
+  paidBy: string // member id
+  splitWith: string[] // member ids who split this expense
+}
+
+export interface TripDay {
+  dayNumber: number
+  date: string
+  expenses: Expense[]
+}
+
+export interface Trip {
+  name: string
+  members: Member[]
+  days: TripDay[]
+}
+
+export interface Settlement {
+  from: string // member name
+  to: string // member name
+  amount: number
+}

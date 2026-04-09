@@ -1,0 +1,122 @@
+import { Member, Expense, TripDay, Settlement } from './types'
+
+const MEMBER_COLORS = [
+  'bg-blue-500',
+  'bg-emerald-500',
+  'bg-amber-500',
+  'bg-rose-500',
+  'bg-violet-500',
+  'bg-cyan-500',
+  'bg-orange-500',
+  'bg-pink-500',
+]
+
+export function generateId(): string {
+  return Math.random().toString(36).substring(2, 9)
+}
+
+export function getNextColor(members: Member[]): string {
+  const usedColors = members.map((m) => m.color)
+  const available = MEMBER_COLORS.filter((c) => !usedColors.includes(c))
+  return available.length > 0 ? available[0] : MEMBER_COLORS[members.length % MEMBER_COLORS.length]
+}
+
+export function calculateSettlements(members: Member[], days: TripDay[]): Settlement[] {
+  // Calculate net balance for each member
+  const balances: Record<string, number> = {}
+  
+  members.forEach((member) => {
+    balances[member.id] = 0
+  })
+
+  // Process all expenses
+  days.forEach((day) => {
+    day.expenses.forEach((expense) => {
+      const splitCount = expense.splitWith.length
+      if (splitCount === 0) return
+
+      const perPerson = expense.amount / splitCount
+
+      // Payer gets credited
+      balances[expense.paidBy] += expense.amount
+
+      // Everyone who splits owes their share
+      expense.splitWith.forEach((memberId) => {
+        balances[memberId] -= perPerson
+      })
+    })
+  })
+
+  // Calculate settlements (simplified algorithm)
+  const settlements: Settlement[] = []
+  const debtors: { id: string; amount: number }[] = []
+  const creditors: { id: string; amount: number }[] = []
+
+  Object.entries(balances).forEach(([memberId, balance]) => {
+    if (balance < -0.01) {
+      debtors.push({ id: memberId, amount: -balance })
+    } else if (balance > 0.01) {
+      creditors.push({ id: memberId, amount: balance })
+    }
+  })
+
+  // Sort for optimal matching
+  debtors.sort((a, b) => b.amount - a.amount)
+  creditors.sort((a, b) => b.amount - a.amount)
+
+  // Match debtors with creditors
+  let i = 0
+  let j = 0
+
+  while (i < debtors.length && j < creditors.length) {
+    const debtor = debtors[i]
+    const creditor = creditors[j]
+
+    const amount = Math.min(debtor.amount, creditor.amount)
+
+    if (amount > 0.01) {
+      const fromMember = members.find((m) => m.id === debtor.id)
+      const toMember = members.find((m) => m.id === creditor.id)
+
+      if (fromMember && toMember) {
+        settlements.push({
+          from: fromMember.name,
+          to: toMember.name,
+          amount: Math.round(amount * 100) / 100,
+        })
+      }
+    }
+
+    debtor.amount -= amount
+    creditor.amount -= amount
+
+    if (debtor.amount < 0.01) i++
+    if (creditor.amount < 0.01) j++
+  }
+
+  return settlements
+}
+
+export function getTotalExpenses(days: TripDay[]): number {
+  return days.reduce((total, day) => {
+    return total + day.expenses.reduce((dayTotal, expense) => dayTotal + expense.amount, 0)
+  }, 0)
+}
+
+export function getMemberTotalPaid(memberId: string, days: TripDay[]): number {
+  return days.reduce((total, day) => {
+    return total + day.expenses.filter((e) => e.paidBy === memberId).reduce((sum, e) => sum + e.amount, 0)
+  }, 0)
+}
+
+export function getMemberTotalOwes(memberId: string, days: TripDay[]): number {
+  let total = 0
+  days.forEach((day) => {
+    day.expenses.forEach((expense) => {
+      if (expense.splitWith.includes(memberId)) {
+        total += expense.amount / expense.splitWith.length
+      }
+    })
+  })
+  return total
+}
